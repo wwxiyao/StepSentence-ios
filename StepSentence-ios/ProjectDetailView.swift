@@ -1,8 +1,15 @@
 import SwiftUI
 import SwiftData
+import AVFoundation
 
 struct ProjectDetailView: View {
     @Bindable var project: Project
+    
+    // Sequential playback state
+    @State private var isSequentialPlaying = false
+    @State private var playbackList: [Sentence] = []
+    @State private var playbackIndex: Int = 0
+    @State private var currentPlayingSentenceID: Sentence.ID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -22,27 +29,68 @@ struct ProjectDetailView: View {
             }
             .padding(.horizontal)
 
-            List {
-                let sorted = project.sentences.sorted(by: { $0.order < $1.order })
-                let nextUnlockId = sorted.first(where: { $0.status == .notStarted })?.id
-
-                ForEach(sorted) { sentence in
-                    let isUnlocked = sentence.status != .notStarted || sentence.id == nextUnlockId
-
-                    Group {
-                        if isUnlocked {
-                            NavigationLink(destination: PracticeView(sentence: sentence, project: project)) {
-                                rowView(for: sentence)
-                            }
-                        } else {
-                            rowView(for: sentence)
-                                .opacity(0.6)
-                        }
+            // Playback control (single capsule-style toggle)
+            HStack(spacing: 16) {
+                Button(action: {
+                    if isSequentialPlaying {
+                        stopSequentialPlayback()
+                    } else {
+                        startSequentialPlayback()
                     }
-                    .listRowSeparator(.hidden)
+                }) {
+                    HStack(spacing: 10) {
+                        Image(systemName: isSequentialPlaying ? "stop.fill" : "play.fill")
+                            .font(.title2.weight(.bold))
+                        Text(isSequentialPlaying ? "停止播放" : "播放已录制")
+                            .font(.headline)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .background(
+                        Capsule().fill(isSequentialPlaying ? Color.red : Color.accentColor)
+                    )
+                    .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isSequentialPlaying ? "停止播放" : "播放已录制")
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 4)
+
+            ScrollViewReader { proxy in
+                List {
+                    let sorted = project.sentences.sorted(by: { $0.order < $1.order })
+                    let nextUnlockId = sorted.first(where: { $0.status == .notStarted })?.id
+
+                    ForEach(sorted) { sentence in
+                        let isUnlocked = sentence.status != .notStarted || sentence.id == nextUnlockId
+                        let isPlayingThis = sentence.id == currentPlayingSentenceID
+
+                        Group {
+                            if isUnlocked {
+                                NavigationLink(destination: PracticeView(sentence: sentence, project: project)) {
+                                    rowView(for: sentence)
+                                }
+                            } else {
+                                rowView(for: sentence)
+                                    .opacity(0.6)
+                            }
+                        }
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(isPlayingThis ? Color.accentColor.opacity(0.12) : Color.clear)
+                        .id(sentence.id)
+                    }
+                }
+                .listStyle(.plain)
+                .onChange(of: currentPlayingSentenceID) { _, newValue in
+                    guard let id = newValue else { return }
+                    withAnimation(.easeInOut) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
                 }
             }
-            .listStyle(.plain)
         }
         // No navigation title on this page per request
         .toolbar {
@@ -57,6 +105,9 @@ struct ProjectDetailView: View {
         .onAppear {
             print("[ProjectDetailView] Appear for project: \(project.title), sentences: \(project.sentences.count)")
             // Removed TTS voice logging per request
+        }
+        .onDisappear {
+            stopSequentialPlayback()
         }
     }
 
@@ -82,6 +133,70 @@ struct ProjectDetailView: View {
             return .green
         }
     }
+}
+
+// MARK: - Sequential Playback Logic
+extension ProjectDetailView {
+    private func startSequentialPlayback() {
+        // Build ordered playback list until first missing recording
+        let sorted = project.sentences.sorted { $0.order < $1.order }
+        var contiguous: [Sentence] = []
+        for s in sorted {
+            if let url = s.audioURL, FileManager.default.fileExists(atPath: url.path) {
+                contiguous.append(s)
+            } else {
+                break
+            }
+        }
+        guard !contiguous.isEmpty else { return }
+
+        playbackList = contiguous
+        playbackIndex = 0
+        isSequentialPlaying = true
+        currentPlayingSentenceID = nil
+        playNextIfPossible()
+    }
+
+    private func playNextIfPossible() {
+        guard isSequentialPlaying else { return }
+        guard playbackIndex < playbackList.count else {
+            isSequentialPlaying = false
+            return
+        }
+
+        let sentence = playbackList[playbackIndex]
+        guard let url = sentence.audioURL, FileManager.default.fileExists(atPath: url.path) else {
+            // Stop at the first missing recording; do not skip
+            isSequentialPlaying = false
+            currentPlayingSentenceID = nil
+            return
+        }
+
+        currentPlayingSentenceID = sentence.id
+        do {
+            try AudioPlayback.shared.play(url: url) {
+                // Proceed to next when current finishes
+                DispatchQueue.main.async {
+                    playbackIndex += 1
+                    playNextIfPossible()
+                }
+            }
+        } catch {
+            // Stop on error
+            isSequentialPlaying = false
+            currentPlayingSentenceID = nil
+        }
+    }
+
+    private func stopSequentialPlayback() {
+        isSequentialPlaying = false
+        AudioPlayback.shared.stop()
+        currentPlayingSentenceID = nil
+    }
+
+    
+
+    // Seeking removed per request (no dragging)
 }
 
 #Preview {

@@ -20,9 +20,9 @@ final class LocalTTS: NSObject, AVSpeechSynthesizerDelegate {
             if let saved = UserDefaults.standard.string(forKey: preferredVoiceKey), isVoiceAvailable(identifier: saved) {
                 return saved
             }
-            // Fallback: prefer Ava, then Evan, else nil
-            if isVoiceAvailable(identifier: Self.avaId) { return Self.avaId }
+            // Fallback: prefer Evan (male), then Ava (female), else nil
             if isVoiceAvailable(identifier: Self.evanId) { return Self.evanId }
+            if isVoiceAvailable(identifier: Self.avaId) { return Self.avaId }
             return nil
         }
         set {

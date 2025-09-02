@@ -9,7 +9,7 @@ struct PracticeView: View {
     @State private var viewModel: PracticeViewModel?
     @State private var errorMessage: String?
     @State private var isInitializing = true
-    @State private var ttsSelectedVoiceId: String = LocalTTS.shared.preferredVoiceId ?? LocalTTS.avaId
+    @State private var ttsSelectedVoiceId: String = LocalTTS.shared.preferredVoiceId ?? LocalTTS.evanId
     
     @Environment(\.dismiss) private var dismiss
     
@@ -35,7 +35,7 @@ struct PracticeView: View {
                 }
             }
         }
-        .navigationTitle("单句练习")
+        .navigationTitle("单句朗读")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: initializeViewModel)
         .onDisappear {
@@ -200,10 +200,10 @@ struct PracticeView: View {
                 LocalTTS.shared.preferredVoiceId = selectedVoiceId
                 return
             }
-            if LocalTTS.shared.isVoiceAvailable(identifier: LocalTTS.avaId) {
-                selectedVoiceId = LocalTTS.avaId
-            } else if LocalTTS.shared.isVoiceAvailable(identifier: LocalTTS.evanId) {
+            if LocalTTS.shared.isVoiceAvailable(identifier: LocalTTS.evanId) {
                 selectedVoiceId = LocalTTS.evanId
+            } else if LocalTTS.shared.isVoiceAvailable(identifier: LocalTTS.avaId) {
+                selectedVoiceId = LocalTTS.avaId
             }
             LocalTTS.shared.preferredVoiceId = selectedVoiceId
         }
@@ -233,7 +233,7 @@ struct PracticeView: View {
     @ViewBuilder
     private func recordingControls(for vm: PracticeViewModel) -> some View {
         // Unified controls: Play (left) + Primary action (right: Record/Stop/Redo)
-        HStack(spacing: 25) {
+        HStack(spacing: 16) {
             // Play button (disabled when no recording)
             Button(action: { vm.playUserRecording() }) {
                 Image(systemName: "play.fill")
@@ -243,7 +243,8 @@ struct PracticeView: View {
             }
             .disabled(vm.userRecordingURL == nil || vm.isPlayingRecording)
 
-            Spacer(minLength: 24)
+            // Simple dynamic effect while recording, placed between buttons
+            RecordingIndicatorView(isActive: vm.isRecording)
 
             // Primary action button (single position):
             // - No recording: Record (red)
@@ -258,7 +259,7 @@ struct PracticeView: View {
                     vm.recordButtonTapped() // start recording
                 }
             }) {
-                let icon = vm.isRecording ? "stop.fill" : (vm.userRecordingURL == nil ? "mic.fill" : "arrow.clockwise")
+                let icon = vm.isRecording ? "stop.fill" : (vm.userRecordingURL == nil ? "mic.fill" : "arrow.trianglehead.clockwise")
                 let color = vm.isRecording ? destructiveColor : (vm.userRecordingURL == nil ? destructiveColor : warningColor)
                 Image(systemName: icon)
                     .font(.largeTitle)
@@ -272,6 +273,48 @@ struct PracticeView: View {
         .background(cardBackgroundColor)
         .cornerRadius(40)
         .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+    }
+
+    // MARK: - Recording Indicator (simple animated bars)
+    private struct RecordingIndicatorView: View {
+        let isActive: Bool
+
+        private let barCount = 5
+        private let barWidth: CGFloat = 3
+        private let barHeight: CGFloat = 26
+        private let spacing: CGFloat = 4
+
+        var body: some View {
+            Group {
+                if isActive {
+                    TimelineView(.animation) { context in
+                        let t = context.date.timeIntervalSinceReferenceDate
+                        HStack(spacing: spacing) {
+                            ForEach(0..<barCount, id: \.self) { i in
+                                let phase = Double(i) * 0.5
+                                let value = 0.35 + 0.65 * abs(sin(t * 2.0 + phase))
+                                Capsule(style: .continuous)
+                                    .fill(Color.black)
+                                    .frame(width: barWidth, height: barHeight)
+                                    .scaleEffect(y: value, anchor: .bottom)
+                            }
+                        }
+                        .frame(width: totalWidth, height: barHeight)
+                    }
+                    .transition(.opacity.combined(with: .scale))
+                } else {
+                    // Keep layout stable when inactive
+                    Color.clear
+                        .frame(width: totalWidth, height: barHeight)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isActive)
+            .accessibilityHidden(true)
+        }
+
+        private var totalWidth: CGFloat {
+            CGFloat(barCount) * barWidth + CGFloat(barCount - 1) * spacing
+        }
     }
     
     private func initializeViewModel() {

@@ -21,7 +21,11 @@ struct ProjectsView: View {
                 }
                 .onDelete(perform: delete)
             }
-            .navigationTitle("资料库")
+            .navigationTitle("库")
+            // 与下面的列表拉开一点点距离
+            .safeAreaInset(edge: .top) {
+                Color.clear.frame(height: 8)
+            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: { 
