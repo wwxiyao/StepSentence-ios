@@ -20,7 +20,7 @@ struct ProjectDetailView: View {
                 
                 ProgressView(value: Double(project.completedCount), total: Double(project.totalCount)) {
                     HStack {
-                        Text("进度")
+                        Text("录制进度")
                         Spacer()
                         Text("\(project.completedCount)/\(project.totalCount)")
                     }
@@ -38,19 +38,19 @@ struct ProjectDetailView: View {
                         startSequentialPlayback()
                     }
                 }) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         Image(systemName: isSequentialPlaying ? "stop.fill" : "play.fill")
-                            .font(.title2.weight(.bold))
+                            .font(.title3.weight(.semibold))
                         Text(isSequentialPlaying ? "停止播放" : "播放已录制")
-                            .font(.headline)
+                            .font(.subheadline)
                     }
                     .foregroundColor(.white)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 14)
                     .background(
                         Capsule().fill(isSequentialPlaying ? Color.red : Color.accentColor)
                     )
-                    .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+                    .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 1)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isSequentialPlaying ? "停止播放" : "播放已录制")
