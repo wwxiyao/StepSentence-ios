@@ -68,17 +68,11 @@ struct ProjectDetailView: View {
 }
 
 #Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: Project.self, configurations: config)
-    
-    let project = Project(title: "奥巴马演讲", fullText: "我的同胞们，我今天站在这里，为我们面前的艰巨任务而感到谦卑。感谢你们对我的信任，也铭记我们的祖先所付出的牺牲。")
-    project.sentences = [
-        Sentence(order: 0, text: "我的同胞们，我今天站在这里，为我们面前的艰巨任务而感到谦卑。", status: .approved, project: project),
-        Sentence(order: 1, text: "感谢你们对我的信任，也铭记我们的祖先所付出的牺牲。", status: .notStarted, project: project)
-    ]
+    let project: Project = Project(title: "测试项目", fullText: "这是一个测试句子。")
+    project.sentences = [Sentence(order: 0, text: "这是一个测试句子。", project: project)]
     
     return NavigationStack {
         ProjectDetailView(project: project)
-            .modelContainer(container)
+            .modelContainer(for: [Project.self, Sentence.self], inMemory: true)
     }
 }

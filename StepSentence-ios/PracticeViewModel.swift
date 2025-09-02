@@ -8,8 +8,10 @@ final class PracticeViewModel {
     private var project: Project
 
     // MARK: - State
-    var isPlaying = false
+    var isPlayingTTS = false
+    var isPlayingRecording = false
     var isRecording = false
+    var errorMessage: String?
     var userRecordingURL: URL? {
         didSet {
             sentence.audioFileName = userRecordingURL?.lastPathComponent
@@ -48,16 +50,18 @@ final class PracticeViewModel {
     }
 
     func playTTSButtonTapped() {
-        isPlaying = true
+        errorMessage = nil
+        isPlayingTTS = true
         Task {
             do {
                 try await localTTS.speak(text: sentence.text, languageCode: "zh-CN")
                 await MainActor.run {
-                    self.isPlaying = false
+                    self.isPlayingTTS = false
                 }
             } catch {
                 await MainActor.run {
-                    self.isPlaying = false
+                    self.isPlayingTTS = false
+                    self.errorMessage = "播放失败: \(error.localizedDescription)"
                 }
             }
         }
@@ -71,17 +75,44 @@ final class PracticeViewModel {
         }
     }
 
+    func playUserRecording() {
+        guard let userURL = userRecordingURL else { return }
+        
+        errorMessage = nil
+        isPlayingRecording = true
+        Task {
+            do {
+                try await self.playAudio(url: userURL)
+                await MainActor.run { self.isPlayingRecording = false }
+            } catch {
+                await MainActor.run { 
+                    self.isPlayingRecording = false
+                    self.errorMessage = "播放录音失败: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
     func playComparison() {
         guard let userURL = userRecordingURL else { return }
         
-        isPlaying = true
+        errorMessage = nil
+        isPlayingTTS = true
+        isPlayingRecording = true
         Task {
             do {
                 try await localTTS.speak(text: sentence.text, languageCode: "zh-CN")
                 try await self.playAudio(url: userURL)
-                await MainActor.run { self.isPlaying = false }
+                await MainActor.run { 
+                    self.isPlayingTTS = false
+                    self.isPlayingRecording = false
+                }
             } catch {
-                await MainActor.run { self.isPlaying = false }
+                await MainActor.run { 
+                    self.isPlayingTTS = false
+                    self.isPlayingRecording = false
+                    self.errorMessage = "对比播放失败: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -120,7 +151,8 @@ final class PracticeViewModel {
 
         // Reset properties for the new sentence
         self.sentence = newSentence
-        self.isPlaying = false
+        self.isPlayingTTS = false
+        self.isPlayingRecording = false
         self.isRecording = false
         self.userRecordingURL = nil
         
@@ -139,6 +171,7 @@ final class PracticeViewModel {
 
     private func startRecording() {
         print("[PracticeViewModel] startRecording called.")
+        errorMessage = nil
         let newRecordingURL = FileManager.documentsDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
         do {
             // Reset previous recording if any
@@ -151,6 +184,7 @@ final class PracticeViewModel {
             print("[PracticeViewModel] State changed to: isRecording = true")
         } catch {
             print("[PracticeViewModel] Error starting recording: \(error)")
+            self.errorMessage = "开始录音失败: \(error.localizedDescription)"
         }
     }
 
@@ -160,10 +194,13 @@ final class PracticeViewModel {
         recordingManager.stopRecording { url in
             DispatchQueue.main.async {
                 print("[PracticeViewModel] stopRecording completion handler. URL: \(url?.absoluteString ?? "nil")")
-                self.userRecordingURL = url
-                self.sentence.status = .recorded
-                print("[PracticeViewModel] Recording finished.")
-                self.playComparison()
+                if let url = url {
+                    self.userRecordingURL = url
+                    self.sentence.status = .recorded
+                    print("[PracticeViewModel] Recording finished.")
+                } else {
+                    self.errorMessage = "录音失败，请重试"
+                }
             }
         }
     }

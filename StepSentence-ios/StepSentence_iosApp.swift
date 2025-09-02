@@ -12,7 +12,7 @@ import SwiftData
 struct StepSentence_iosApp: App {
     var body: some Scene {
         WindowGroup {
-            SwiftDataTestView()
+            ProjectsView()
         }
         .modelContainer(for: [Project.self, Sentence.self])
     }
