@@ -56,8 +56,7 @@ struct ProjectDetailView: View {
         }
         .onAppear {
             print("[ProjectDetailView] Appear for project: \(project.title), sentences: \(project.sentences.count)")
-            // Log only English TTS voices
-            LocalTTS.shared.logAvailableVoices(languagePrefix: "en", force: true)
+            // Removed TTS voice logging per request
         }
     }
 

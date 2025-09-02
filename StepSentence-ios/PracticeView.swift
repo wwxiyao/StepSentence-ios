@@ -232,50 +232,46 @@ struct PracticeView: View {
     
     @ViewBuilder
     private func recordingControls(for vm: PracticeViewModel) -> some View {
-        // Combined Recording and Playback Controls
-        if vm.userRecordingURL == nil {
-            // Record Button
-            Button(action: { vm.recordButtonTapped() }) {
-                Image(systemName: vm.isRecording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 50)) // Increased size
-                    .foregroundColor(.white)
-                    .frame(width: 90, height: 90) // Increased size
-                    .background(vm.isRecording ? destructiveColor : primaryColor)
-                    .clipShape(Circle())
-                    .shadow(color: primaryColor.opacity(0.5), radius: 10, x: 0, y: 5)
+        // Unified controls: Play (left) + Primary action (right: Record/Stop/Redo)
+        HStack(spacing: 25) {
+            // Play button (disabled when no recording)
+            Button(action: { vm.playUserRecording() }) {
+                Image(systemName: "play.fill")
+                    .font(.largeTitle)
+                    .foregroundColor(primaryColor)
+                    .opacity(vm.userRecordingURL == nil ? 0.4 : 1.0)
+            }
+            .disabled(vm.userRecordingURL == nil || vm.isPlayingRecording)
+
+            Spacer(minLength: 24)
+
+            // Primary action button (single position):
+            // - No recording: Record (red)
+            // - Recording: Stop (red)
+            // - Has recording: Redo -> reset and immediately start recording (orange)
+            Button(action: {
+                if vm.isRecording {
+                    vm.recordButtonTapped() // stops recording
+                } else if vm.userRecordingURL != nil {
+                    vm.resetPractice(); vm.recordButtonTapped() // redo and start recording
+                } else {
+                    vm.recordButtonTapped() // start recording
+                }
+            }) {
+                let icon = vm.isRecording ? "stop.fill" : (vm.userRecordingURL == nil ? "mic.fill" : "arrow.clockwise")
+                let color = vm.isRecording ? destructiveColor : (vm.userRecordingURL == nil ? destructiveColor : warningColor)
+                Image(systemName: icon)
+                    .font(.largeTitle)
+                    .foregroundColor(color)
             }
             .disabled(vm.isPlayingTTS)
-        } else {
-            // Playback Menu
-            HStack(spacing: 25) {
-                // Play
-                Button(action: { vm.playUserRecording() }) {
-                    Image(systemName: "play.fill")
-                        .font(.largeTitle) // Increased size
-                        .foregroundColor(primaryColor)
-                }
-                .disabled(vm.isPlayingRecording)
-
-                // Redo
-                Button(action: { vm.resetPractice() }) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.largeTitle) // Increased size
-                        .foregroundColor(warningColor)
-                }
-                
-                // Delete
-                Button(action: { vm.resetPractice() }) {
-                    Image(systemName: "trash.fill")
-                        .font(.largeTitle) // Increased size
-                        .foregroundColor(destructiveColor)
-                }
-            }
-            .padding(.vertical, 20)
-            .padding(.horizontal, 30)
-            .background(cardBackgroundColor)
-            .cornerRadius(40)
-            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
         }
+        .padding(.vertical, 20)
+        .padding(.horizontal, 30)
+        .frame(maxWidth: 300)
+        .background(cardBackgroundColor)
+        .cornerRadius(40)
+        .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
     }
     
     private func initializeViewModel() {
