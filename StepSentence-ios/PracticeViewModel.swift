@@ -93,29 +93,7 @@ final class PracticeViewModel {
         }
     }
     
-    func playComparison() {
-        guard let userURL = userRecordingURL else { return }
-        
-        errorMessage = nil
-        isPlayingTTS = true
-        isPlayingRecording = true
-        Task {
-            do {
-                try await localTTS.speak(text: sentence.text, languageCode: "zh-CN")
-                try await self.playAudio(url: userURL)
-                await MainActor.run { 
-                    self.isPlayingTTS = false
-                    self.isPlayingRecording = false
-                }
-            } catch {
-                await MainActor.run { 
-                    self.isPlayingTTS = false
-                    self.isPlayingRecording = false
-                    self.errorMessage = "对比播放失败: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
+    
 
     func resetPractice() {
         audioPlayback.stop()

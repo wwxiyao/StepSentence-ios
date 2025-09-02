@@ -11,178 +11,186 @@ struct PracticeView: View {
     
     @Environment(\.dismiss) private var dismiss
     
-    var body: some View {
-        VStack {
-            if isInitializing {
-                Text("初始化中...")
-                    .font(.title)
-            } else if let error = errorMessage {
-                VStack {
-                    Text("错误")
-                        .font(.title)
-                        .foregroundColor(.red)
-                    Text(error)
-                        .font(.body)
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                }
-            } else if let vm = viewModel {
-                VStack(spacing: 20) {
-                    Spacer()
-                    
-                    Text(vm.sentence.text)
-                        .font(.largeTitle)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                    
-                    Spacer()
-                    
-                    // 错误信息显示
-                    if let errorMessage = vm.errorMessage {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .padding(.horizontal)
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    // 基本按钮
-                    HStack(spacing: 60) {
-                        Button(action: { 
-                            print("[PracticeView] TTS 按钮点击")
-                            vm.playTTSButtonTapped() 
-                        }) {
-                            Image(systemName: "speaker.wave.2.fill")
-                                .font(.largeTitle)
-                        }
-                        .disabled(vm.isRecording || vm.isPlayingTTS)
-                        .opacity(vm.isPlayingTTS ? 0.6 : 1.0)
+    // Color Palette
+    private let backgroundColor = Color(.systemGray6)
+    private let cardBackgroundColor = Color(.systemBackground)
+    private let primaryColor = Color.accentColor
+    private let destructiveColor = Color.red
+    private let warningColor = Color.orange
+    private let successColor = Color.green
 
-                        Button(action: { 
-                            print("[PracticeView] 录音按钮点击")
-                            vm.recordButtonTapped() 
-                        }) {
-                            Image(systemName: vm.isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                                .font(.system(size: 80))
-                                .foregroundColor(vm.isRecording ? .red : .accentColor)
-                        }
-                        .disabled(vm.isPlayingTTS || vm.isPlayingRecording)
-                    }
-                    
-                    // 录音播放按钮（当有录音时显示）
-                    if vm.userRecordingURL != nil && !vm.isRecording {
-                        HStack(spacing: 40) {
-                            Button(action: { 
-                                print("[PracticeView] 播放录音按钮点击")
-                                vm.playUserRecording() 
-                            }) {
-                                HStack {
-                                    Image(systemName: "play.circle.fill")
-                                    Text("播放录音")
-                                }
-                                .font(.title2)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.blue)
-                            .disabled(vm.isPlayingRecording)
-                            .opacity(vm.isPlayingRecording ? 0.6 : 1.0)
-                            
-                            Button(action: { 
-                                print("[PracticeView] 对比播放按钮点击")
-                                vm.playComparison() 
-                            }) {
-                                HStack {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
-                                    Text("对比播放")
-                                }
-                                .font(.title2)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.purple)
-                            .disabled(vm.isPlayingTTS || vm.isPlayingRecording)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // 评估按钮（当有录音时显示）
-                    if vm.userRecordingURL != nil && !vm.isRecording {
-                        HStack(spacing: 40) {
-                            Button(action: { 
-                                print("[PracticeView] 重录按钮点击")
-                                vm.resetPractice() 
-                            }) {
-                                Text("重录")
-                                    .font(.title2)
-                                    .padding()
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.orange)
-                            .disabled(vm.isPlayingTTS || vm.isPlayingRecording)
-                            
-                            Button(action: { 
-                                print("[PracticeView] 满意按钮点击")
-                                vm.approveSentence()
-                                if let nextSentence = vm.getNextSentence() {
-                                    vm.reset(for: nextSentence)
-                                } else {
-                                    dismiss()
-                                }
-                            }) {
-                                Text("满意")
-                                    .font(.title2)
-                                    .padding()
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.green)
-                            .disabled(vm.isPlayingTTS || vm.isPlayingRecording)
-                        }
-                        .padding()
-                    }
-                    
-                    Spacer()
+    var body: some View {
+        ZStack {
+            backgroundColor.edgesIgnoringSafeArea(.all)
+            
+            VStack {
+                if isInitializing {
+                    initializationView
+                } else if let error = errorMessage {
+                    errorView(error)
+                } else if let vm = viewModel {
+                    practiceInterface(for: vm)
                 }
             }
         }
         .navigationTitle("单句练习")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            print("[PracticeView] 开始初始化")
-            initializeViewModel()
-        }
+        .onAppear(perform: initializeViewModel)
         .onDisappear {
             viewModel?.onViewDisappear()
         }
     }
     
-    private func initializeViewModel() {
-        print("[PracticeView] 创建 PracticeViewModel")
-        
-        do {
-            print("[PracticeView] 步骤1: 创建 ViewModel 实例")
-            let vm = PracticeViewModel(sentence: sentence, project: project)
-            print("[PracticeView] 步骤2: ViewModel 创建成功")
-            
-            print("[PracticeView] 步骤3: 调用 onViewAppear")
-            vm.onViewAppear()
-            print("[PracticeView] 步骤4: onViewAppear 完成")
-            
-            self.viewModel = vm
-            self.isInitializing = false
-            print("[PracticeView] 初始化完成")
-            
-        } catch {
-            print("[PracticeView] 初始化失败: \(error)")
-            self.errorMessage = "初始化失败: \(error.localizedDescription)"
-            self.isInitializing = false
+    @ViewBuilder
+    private var initializationView: some View {
+        VStack {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: primaryColor))
+                .scaleEffect(1.5)
+            Text("初始化中...")
+                .font(.title2)
+                .foregroundColor(.secondary)
+                .padding()
         }
+    }
+    
+    @ViewBuilder
+    private func errorView(_ error: String) -> some View {
+        VStack(spacing: 15) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 50))
+                .foregroundColor(destructiveColor)
+            Text("发生错误")
+                .font(.title.bold())
+                .foregroundColor(.primary)
+            Text(error)
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+    }
+    
+    @ViewBuilder
+    private func practiceInterface(for vm: PracticeViewModel) -> some View {
+        VStack {
+            Spacer()
+            sentenceCard(for: vm)
+            Spacer()
+            
+            if let errorMessage = vm.errorMessage {
+                Text(errorMessage)
+                    .foregroundColor(destructiveColor)
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+                    .padding()
+            }
+            
+            recordingControls(for: vm)
+                .padding(.bottom, 30)
+            
+            Spacer()
+        }
+        .padding()
+    }
+    
+    @ViewBuilder
+    private func sentenceCard(for vm: PracticeViewModel) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            Text(vm.sentence.text)
+                .font(.system(size: 28, weight: .medium, design: .rounded))
+                .multilineTextAlignment(.center)
+                .padding(EdgeInsets(top: 30, leading: 30, bottom: 120, trailing: 30)) // Increased bottom padding
+                .frame(maxWidth: .infinity, minHeight: 280, alignment: .center)
+                .background(cardBackgroundColor)
+                .cornerRadius(20)
+                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+            
+            HStack(spacing: 20) {
+                // TTS Button
+                Button(action: { vm.playTTSButtonTapped() }) {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.largeTitle) // Increased size
+                        .foregroundColor(primaryColor)
+                }
+                .disabled(vm.isRecording || vm.isPlayingTTS || vm.isPlayingRecording)
+                .opacity(vm.isPlayingTTS ? 0.5 : 1.0)
+                
+                // Approval Button (conditionally)
+                if vm.userRecordingURL != nil && !vm.isRecording {
+                    Button(action: {
+                        vm.approveSentence()
+                        if let nextSentence = vm.getNextSentence() {
+                            vm.reset(for: nextSentence)
+                        } else {
+                            dismiss()
+                        }
+                    }) {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .font(.system(size: 44)) // Increased size
+                            .foregroundColor(successColor)
+                    }
+                    .disabled(vm.isPlayingTTS || vm.isPlayingRecording)
+                }
+            }
+            .padding()
+        }
+        .padding(.horizontal)
+    }
+    
+    @ViewBuilder
+    private func recordingControls(for vm: PracticeViewModel) -> some View {
+        // Combined Recording and Playback Controls
+        if vm.userRecordingURL == nil {
+            // Record Button
+            Button(action: { vm.recordButtonTapped() }) {
+                Image(systemName: vm.isRecording ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 50)) // Increased size
+                    .foregroundColor(.white)
+                    .frame(width: 90, height: 90) // Increased size
+                    .background(vm.isRecording ? destructiveColor : primaryColor)
+                    .clipShape(Circle())
+                    .shadow(color: primaryColor.opacity(0.5), radius: 10, x: 0, y: 5)
+            }
+            .disabled(vm.isPlayingTTS)
+        } else {
+            // Playback Menu
+            HStack(spacing: 25) {
+                // Play
+                Button(action: { vm.playUserRecording() }) {
+                    Image(systemName: "play.fill")
+                        .font(.largeTitle) // Increased size
+                        .foregroundColor(primaryColor)
+                }
+                .disabled(vm.isPlayingRecording)
+
+                // Redo
+                Button(action: { vm.resetPractice() }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.largeTitle) // Increased size
+                        .foregroundColor(warningColor)
+                }
+                
+                // Delete
+                Button(action: { vm.resetPractice() }) {
+                    Image(systemName: "trash.fill")
+                        .font(.largeTitle) // Increased size
+                        .foregroundColor(destructiveColor)
+                }
+            }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 30)
+            .background(cardBackgroundColor)
+            .cornerRadius(40)
+            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+        }
+    }
+    
+    private func initializeViewModel() {
+        let vm = PracticeViewModel(sentence: sentence, project: project)
+        vm.onViewAppear()
+        self.viewModel = vm
+        self.isInitializing = false
     }
 }
 
