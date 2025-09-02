@@ -23,24 +23,28 @@ struct ProjectDetailView: View {
             .padding(.horizontal)
 
             List {
-                ForEach(project.sentences.sorted(by: { $0.order < $1.order })) { sentence in
-                    NavigationLink(destination: PracticeView(sentence: sentence, project: project)) {
-                        HStack {
-                            Text(sentence.text)
-                            Spacer()
-                            Circle()
-                                .frame(width: 12, height: 12)
-                                .foregroundStyle(colorForStatus(sentence.status))
+                let sorted = project.sentences.sorted(by: { $0.order < $1.order })
+                let nextUnlockId = sorted.first(where: { $0.status == .notStarted })?.id
+
+                ForEach(sorted) { sentence in
+                    let isUnlocked = sentence.status != .notStarted || sentence.id == nextUnlockId
+
+                    Group {
+                        if isUnlocked {
+                            NavigationLink(destination: PracticeView(sentence: sentence, project: project)) {
+                                rowView(for: sentence)
+                            }
+                        } else {
+                            rowView(for: sentence)
+                                .opacity(0.6)
                         }
-                        .padding(.vertical, 4)
                     }
                     .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.plain)
         }
-        .navigationTitle("项目蓝图")
-        .navigationBarTitleDisplayMode(.inline)
+        // No navigation title on this page per request
         .toolbar {
             if project.completedCount == project.totalCount && project.totalCount > 0 {
                 ToolbarItem(placement: .primaryAction) {
@@ -52,7 +56,21 @@ struct ProjectDetailView: View {
         }
         .onAppear {
             print("[ProjectDetailView] Appear for project: \(project.title), sentences: \(project.sentences.count)")
+            // Log only English TTS voices
+            LocalTTS.shared.logAvailableVoices(languagePrefix: "en", force: true)
         }
+    }
+
+    @ViewBuilder
+    private func rowView(for sentence: Sentence) -> some View {
+        HStack {
+            Text(sentence.text)
+            Spacer()
+            Circle()
+                .frame(width: 12, height: 12)
+                .foregroundStyle(colorForStatus(sentence.status))
+        }
+        .padding(.vertical, 4)
     }
 
     private func colorForStatus(_ status: SentenceStatus) -> Color {

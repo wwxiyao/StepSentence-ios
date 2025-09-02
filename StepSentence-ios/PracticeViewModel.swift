@@ -54,7 +54,8 @@ final class PracticeViewModel {
         isPlayingTTS = true
         Task {
             do {
-                try await localTTS.speak(text: sentence.text, languageCode: "zh-CN")
+                // Use preferred Ava/Evan if available; otherwise fallback to default language
+                try await localTTS.speak(text: sentence.text)
                 await MainActor.run {
                     self.isPlayingTTS = false
                 }
@@ -110,17 +111,9 @@ final class PracticeViewModel {
     }
 
     func getNextSentence() -> Sentence? {
+        // Jump to the first not-started sentence in project order
         let sortedSentences = project.sentences.sorted { $0.order < $1.order }
-        guard let currentIndex = sortedSentences.firstIndex(where: { $0.id == sentence.id }) else {
-            return nil
-        }
-        
-        let nextIndex = currentIndex + 1
-        if nextIndex < sortedSentences.count {
-            return sortedSentences[nextIndex]
-        } else {
-            return nil
-        }
+        return sortedSentences.first(where: { $0.status == .notStarted })
     }
 
     func reset(for newSentence: Sentence) {

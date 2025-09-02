@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct PracticeView: View {
     let sentence: Sentence
@@ -8,6 +9,7 @@ struct PracticeView: View {
     @State private var viewModel: PracticeViewModel?
     @State private var errorMessage: String?
     @State private var isInitializing = true
+    @State private var ttsSelectedVoiceId: String = LocalTTS.shared.preferredVoiceId ?? LocalTTS.avaId
     
     @Environment(\.dismiss) private var dismiss
     
@@ -75,8 +77,12 @@ struct PracticeView: View {
     private func practiceInterface(for vm: PracticeViewModel) -> some View {
         VStack {
             Spacer()
-            sentenceCard(for: vm)
+            sentenceCard(for: vm, selectedVoiceId: $ttsSelectedVoiceId)
             Spacer()
+
+            // Missing voice guidance (outside the card)
+            MissingVoiceNotice(selectedVoiceId: $ttsSelectedVoiceId)
+                .padding(.bottom, 8)
             
             if let errorMessage = vm.errorMessage {
                 Text(errorMessage)
@@ -95,16 +101,23 @@ struct PracticeView: View {
     }
     
     @ViewBuilder
-    private func sentenceCard(for vm: PracticeViewModel) -> some View {
+    private func sentenceCard(for vm: PracticeViewModel, selectedVoiceId: Binding<String>) -> some View {
         ZStack(alignment: .bottomTrailing) {
             Text(vm.sentence.text)
                 .font(.system(size: 28, weight: .medium, design: .rounded))
                 .multilineTextAlignment(.center)
-                .padding(EdgeInsets(top: 30, leading: 30, bottom: 120, trailing: 30)) // Increased bottom padding
+                // Extra top padding to avoid overlap with the inline picker
+                .padding(EdgeInsets(top: 70, leading: 30, bottom: 120, trailing: 30))
                 .frame(maxWidth: .infinity, minHeight: 280, alignment: .center)
                 .background(cardBackgroundColor)
                 .cornerRadius(20)
                 .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                // Inline voice picker at the top inside the card
+                .overlay(alignment: .topLeading) {
+                    VoicePickerInline(selectedVoiceId: selectedVoiceId)
+                        .padding(.top, 10)
+                        .padding(.leading, 12)
+                }
             
             HStack(spacing: 20) {
                 // TTS Button
@@ -136,6 +149,85 @@ struct PracticeView: View {
             .padding()
         }
         .padding(.horizontal)
+    }
+
+    // MARK: - Inline voice picker inside the card
+    private struct VoicePickerInline: View {
+        @Binding var selectedVoiceId: String
+        var body: some View {
+            Picker("TTS Voice", selection: $selectedVoiceId) {
+                Text("女声").tag(LocalTTS.avaId)
+                Text("男声").tag(LocalTTS.evanId)
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .frame(maxWidth: 160, alignment: .leading)
+            .onChange(of: selectedVoiceId) { _, newValue in
+                LocalTTS.shared.preferredVoiceId = newValue
+            }
+        }
+    }
+
+    // MARK: - Missing voice notice (below the card)
+    private struct MissingVoiceNotice: View {
+        @Binding var selectedVoiceId: String
+        var body: some View {
+            if !LocalTTS.shared.isVoiceAvailable(identifier: selectedVoiceId) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("未安装所选语音，请前往 设置 > 辅助功能 > 朗读内容 > 声音 > 英语 下载对应语音。")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    HStack(spacing: 12) {
+                        #if DEBUG
+                        Button("打开安装页面") { openDeepSettingsEnglishVoices() }
+                            .buttonStyle(.bordered)
+                        #endif
+                        Button("打开App设置") { openAppSettings() }
+                            .buttonStyle(.bordered)
+                        Button("我已安装好") { recheckAndSelectAvailable() }
+                            .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding(10)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                .padding(.horizontal)
+            }
+        }
+
+        private func recheckAndSelectAvailable() {
+            if LocalTTS.shared.isVoiceAvailable(identifier: selectedVoiceId) {
+                LocalTTS.shared.preferredVoiceId = selectedVoiceId
+                return
+            }
+            if LocalTTS.shared.isVoiceAvailable(identifier: LocalTTS.avaId) {
+                selectedVoiceId = LocalTTS.avaId
+            } else if LocalTTS.shared.isVoiceAvailable(identifier: LocalTTS.evanId) {
+                selectedVoiceId = LocalTTS.evanId
+            }
+            LocalTTS.shared.preferredVoiceId = selectedVoiceId
+        }
+
+        private func openAppSettings() {
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+        }
+
+        private func openDeepSettingsEnglishVoices() {
+            let candidates = [
+                "App-Prefs:root=General&path=ACCESSIBILITY/SPEECH/VOICES/English",
+                "App-Prefs:root=General&path=ACCESSIBILITY/SPEECH",
+                "App-Prefs:root=General&path=ACCESSIBILITY"
+            ]
+            for s in candidates {
+                if let u = URL(string: s) {
+                    UIApplication.shared.open(u, options: [:], completionHandler: nil)
+                    return
+                }
+            }
+            openAppSettings()
+        }
     }
     
     @ViewBuilder

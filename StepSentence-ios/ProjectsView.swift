@@ -21,7 +21,7 @@ struct ProjectsView: View {
                 }
                 .onDelete(perform: delete)
             }
-            .navigationTitle("学习项目")
+            .navigationTitle("资料库")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: { 
@@ -31,15 +31,6 @@ struct ProjectsView: View {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel("新建项目")
-                }
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("测试") {
-                        print("[ProjectsView] Test button tapped")
-                        // 创建一个测试项目
-                        let testProject = Project(title: "测试项目", fullText: "这是一个测试句子。")
-                        testProject.sentences = [Sentence(order: 0, text: "这是一个测试句子。", project: testProject)]
-                        projects.append(testProject)
-                    }
                 }
             }
             .sheet(isPresented: $isCreatingNewProject) {
