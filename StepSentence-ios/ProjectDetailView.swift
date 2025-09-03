@@ -239,16 +239,6 @@ extension ProjectDetailView {
     // Timed playback
     private func playTimedSentence(_ sentence: Sentence) {
         guard let start = sentence.startTimeSec, let end = sentence.endTimeSec, end > start else { return }
-        if let url = project.sourceAudioURL {
-            let exists = FileManager.default.fileExists(atPath: url.path)
-            var sizeStr = "unknown"
-            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path), let size = attrs[.size] as? NSNumber {
-                let mb = Double(truncating: size) / (1024*1024)
-                sizeStr = String(format: "%.2f MB", mb)
-            }
-            print("[ProjectDetailView] playTimedSentence ensureLoaded url=\(url.lastPathComponent) exists=\(exists) size=\(sizeStr)")
-            segmentPlayer.ensureLoaded(url: url)
-        }
         currentPlayingSentenceID = sentence.id
         segmentPlayer.playSegment(id: sentence.id.uuidString, start: start, end: end)
     }

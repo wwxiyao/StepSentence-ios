@@ -34,12 +34,7 @@ final class PracticeViewModel {
         self.sortedSentences = sortedSentences
         self.segmentPlayer = segmentPlayer
         
-        if let fileName = sentence.audioFileName {
-            let url = FileManager.documentsDirectory.appendingPathComponent(fileName)
-            if FileManager.default.fileExists(atPath: url.path) {
-                self.userRecordingURL = url
-            }
-        }
+        loadUserRecording(for: sentence)
         
         // Setup segment player
         segmentPlayer.onSegmentEnd = { [weak self] _ in
@@ -147,18 +142,21 @@ final class PracticeViewModel {
         self.isRecording = false
         self.userRecordingURL = nil
         
-        // Check if the new sentence already has a recording
+        loadUserRecording(for: newSentence)
+        
+        print("[PracticeViewModel] Reset for new sentence: \(newSentence.text)")
+    }
+
+    // MARK: - Private Logic
+    
+    private func loadUserRecording(for sentence: Sentence) {
         if let fileName = sentence.audioFileName {
             let url = FileManager.documentsDirectory.appendingPathComponent(fileName)
             if FileManager.default.fileExists(atPath: url.path) {
                 self.userRecordingURL = url
             }
         }
-        
-        print("[PracticeViewModel] Reset for new sentence: \(newSentence.text)")
     }
-
-    // MARK: - Private Logic
 
     private func startRecording() {
         print("[PracticeViewModel] startRecording called.")
