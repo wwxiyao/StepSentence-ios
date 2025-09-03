@@ -118,8 +118,10 @@ struct PracticeView: View {
                 .overlay(alignment: .topLeading) {
                     if project.sourceAudioURL == nil {
                         VoicePickerInline(selectedVoiceId: selectedVoiceId)
-                            .padding(.top, 10)
-                            .padding(.leading, 12)
+                            .padding([.top, .leading], 12)
+                    } else {
+                        TimestampView(sentence: sentence)
+                            .padding([.top, .leading], 12)
                     }
                 }
             
@@ -326,6 +328,31 @@ struct PracticeView: View {
         vm.onViewAppear()
         self.viewModel = vm
         self.isInitializing = false
+    }
+}
+
+// MARK: - Subviews
+private extension PracticeView {
+    struct TimestampView: View {
+        let sentence: Sentence
+        
+        private func formatTime(_ time: Double) -> String {
+            let minutes = Int(time) / 60
+            let seconds = Int(time) % 60
+            let tenths = Int((time.truncatingRemainder(dividingBy: 1)) * 10)
+            return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
+        }
+        
+        var body: some View {
+            if let start = sentence.startTimeSec, let end = sentence.endTimeSec {
+                Text("\(formatTime(start)) → \(formatTime(end))")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                    .background(Color(.systemGray5))
+                    .cornerRadius(6)
+            }
+        }
     }
 }
 
