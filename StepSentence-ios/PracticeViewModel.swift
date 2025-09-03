@@ -124,6 +124,12 @@ final class PracticeViewModel {
 
     func approveSentence() {
         sentence.status = .approved
+        saveContext()
+    }
+
+    func saveContext() {
+        // Explicitly save the context
+        try? project.modelContext?.save()
     }
 
     func getNextSentence() -> Sentence? {

@@ -12,6 +12,7 @@ struct PracticeView: View {
     @State private var errorMessage: String?
     @State private var isInitializing = true
     @State private var ttsSelectedVoiceId: String = LocalTTS.shared.preferredVoiceId ?? LocalTTS.evanId
+    @State private var isEditingTimestamp = false // New state to control editing mode
     
     @Environment(\.dismiss) private var dismiss
     
@@ -114,14 +115,23 @@ struct PracticeView: View {
                 .background(cardBackgroundColor)
                 .cornerRadius(20)
                 .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if isEditingTimestamp {
+                        isEditingTimestamp = false
+                    }
+                }
                 // Inline voice picker at the top inside the card
                 .overlay(alignment: .topLeading) {
                     if project.sourceAudioURL == nil {
                         VoicePickerInline(selectedVoiceId: selectedVoiceId)
                             .padding([.top, .leading], 12)
                     } else {
-                        TimestampView(sentence: sentence)
-                            .padding([.top, .leading], 12)
+                        TimestampView(sentence: sentence, isEditing: $isEditingTimestamp) {
+                            // This is the onCommit callback
+                            viewModel?.saveContext()
+                        }
+                        .padding([.top, .leading], 12)
                     }
                 }
             
@@ -334,7 +344,11 @@ struct PracticeView: View {
 // MARK: - Subviews
 private extension PracticeView {
     struct TimestampView: View {
-        let sentence: Sentence
+        @Bindable var sentence: Sentence
+        @Binding var isEditing: Bool
+        var onCommit: () -> Void
+        
+        private let step = 0.1
         
         private func formatTime(_ time: Double) -> String {
             let minutes = Int(time) / 60
@@ -344,14 +358,69 @@ private extension PracticeView {
         }
         
         var body: some View {
-            if let start = sentence.startTimeSec, let end = sentence.endTimeSec {
-                Text("\(formatTime(start)) → \(formatTime(end))")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .padding(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
-                    .background(Color(.systemGray5))
-                    .cornerRadius(6)
+            if isEditing {
+                editingView
+            } else {
+                displayView
             }
+        }
+        
+        private var displayView: some View {
+            Button(action: { isEditing = true }) {
+                if let start = sentence.startTimeSec, let end = sentence.endTimeSec {
+                    Text("\(formatTime(start)) → \(formatTime(end))")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                        .background(Color(.systemGray5))
+                        .cornerRadius(6)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        
+        @ViewBuilder
+        private var editingView: some View {
+            VStack(alignment: .leading, spacing: 2) {
+                // Start Time
+                timeAdjustmentRow(label: "开始", time: Binding(get: { sentence.startTimeSec ?? 0 }, set: { sentence.startTimeSec = $0 }))
+                
+                // End Time
+                timeAdjustmentRow(label: "结束", time: Binding(get: { sentence.endTimeSec ?? 0 }, set: { sentence.endTimeSec = $0 }))
+            }
+            .padding(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
+            .background(Color(.systemGray6))
+            .cornerRadius(8)
+            .onTapGesture { 
+                // Stop tap from propagating to the card's background tap gesture
+            }
+        }
+        
+        private func timeAdjustmentRow(label: String, time: Binding<Double>) -> some View {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(width: 35, alignment: .leading)
+                Text(formatTime(time.wrappedValue))
+                    .font(.system(.caption, design: .monospaced))
+                
+                Button {
+                    time.wrappedValue -= step
+                    onCommit()
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                }
+                
+                Button {
+                    time.wrappedValue += step
+                    onCommit()
+                } label: { 
+                    Image(systemName: "plus.circle.fill")
+                }
+            }
+            .font(.subheadline)
+            .buttonStyle(.borderless)
+            .tint(.secondary)
         }
     }
 }
