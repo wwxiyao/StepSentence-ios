@@ -22,15 +22,29 @@ final class PracticeViewModel {
     private let recordingManager = RecordingManager.shared
     private let localTTS = LocalTTS.shared
     private let audioPlayback = AudioPlayback.shared
+    private let segmentPlayer: SegmentPlayer
+    
+    private let isTimedProject: Bool
+    private let sortedSentences: [Sentence]
 
-    init(sentence: Sentence, project: Project) {
+    init(sentence: Sentence, project: Project, sortedSentences: [Sentence], segmentPlayer: SegmentPlayer) {
         self.sentence = sentence
         self.project = project
+        self.isTimedProject = project.sourceAudioURL != nil
+        self.sortedSentences = sortedSentences
+        self.segmentPlayer = segmentPlayer
         
         if let fileName = sentence.audioFileName {
             let url = FileManager.documentsDirectory.appendingPathComponent(fileName)
             if FileManager.default.fileExists(atPath: url.path) {
                 self.userRecordingURL = url
+            }
+        }
+        
+        // Setup segment player
+        segmentPlayer.onSegmentEnd = { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.isPlayingTTS = false
             }
         }
     }
@@ -44,6 +58,7 @@ final class PracticeViewModel {
     func onViewDisappear() {
         Task { await localTTS.stop() }
         audioPlayback.stop()
+        segmentPlayer.stop()
         if isRecording {
             recordingManager.stopRecording { _ in } // Stop recording without processing result
         }
@@ -52,17 +67,23 @@ final class PracticeViewModel {
     func playTTSButtonTapped() {
         errorMessage = nil
         isPlayingTTS = true
-        Task {
-            do {
-                // Use preferred Ava/Evan if available; otherwise fallback to default language
-                try await localTTS.speak(text: sentence.text)
-                await MainActor.run {
-                    self.isPlayingTTS = false
-                }
-            } catch {
-                await MainActor.run {
-                    self.isPlayingTTS = false
-                    self.errorMessage = "播放失败: \(error.localizedDescription)"
+
+        if isTimedProject, let start = sentence.startTimeSec, let end = sentence.endTimeSec, end > start {
+            // Play from source audio if available
+            segmentPlayer.playSegment(id: sentence.id.uuidString, start: start, end: end)
+        } else {
+            // Fallback to TTS
+            Task {
+                do {
+                    try await localTTS.speak(text: sentence.text)
+                    await MainActor.run {
+                        self.isPlayingTTS = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.isPlayingTTS = false
+                        self.errorMessage = "播放失败: \(error.localizedDescription)"
+                    }
                 }
             }
         }
@@ -112,7 +133,6 @@ final class PracticeViewModel {
 
     func getNextSentence() -> Sentence? {
         // Jump to the first not-started sentence in project order
-        let sortedSentences = project.sentences.sorted { $0.order < $1.order }
         return sortedSentences.first(where: { $0.status == .notStarted })
     }
 

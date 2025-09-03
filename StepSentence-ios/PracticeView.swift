@@ -5,6 +5,8 @@ import UIKit
 struct PracticeView: View {
     let sentence: Sentence
     let project: Project
+    let sortedSentences: [Sentence]
+    let segmentPlayer: SegmentPlayer
     
     @State private var viewModel: PracticeViewModel?
     @State private var errorMessage: String?
@@ -114,9 +116,11 @@ struct PracticeView: View {
                 .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
                 // Inline voice picker at the top inside the card
                 .overlay(alignment: .topLeading) {
-                    VoicePickerInline(selectedVoiceId: selectedVoiceId)
-                        .padding(.top, 10)
-                        .padding(.leading, 12)
+                    if project.sourceAudioURL == nil {
+                        VoicePickerInline(selectedVoiceId: selectedVoiceId)
+                            .padding(.top, 10)
+                            .padding(.leading, 12)
+                    }
                 }
             
             HStack(spacing: 20) {
@@ -318,7 +322,7 @@ struct PracticeView: View {
     }
     
     private func initializeViewModel() {
-        let vm = PracticeViewModel(sentence: sentence, project: project)
+        let vm = PracticeViewModel(sentence: sentence, project: project, sortedSentences: sortedSentences, segmentPlayer: segmentPlayer)
         vm.onViewAppear()
         self.viewModel = vm
         self.isInitializing = false
@@ -331,6 +335,6 @@ struct PracticeView: View {
     project.sentences = [sentence]
     
     return NavigationStack {
-        PracticeView(sentence: sentence, project: project)
+        PracticeView(sentence: sentence, project: project, sortedSentences: project.sentences, segmentPlayer: SegmentPlayer())
     }
 }

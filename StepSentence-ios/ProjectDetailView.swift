@@ -11,6 +11,13 @@ struct ProjectDetailView: View {
     @State private var playbackIndex: Int = 0
     @State private var currentPlayingSentenceID: Sentence.ID?
 
+    // Segment (source audio) playback
+    @State private var segmentPlayer: SegmentPlayer = SegmentPlayer()
+    @State private var isTimedProject: Bool = false
+    @State private var appearT0: Date = .now
+    @State private var didLogFirstRowAppear = false
+    @State private var sortedSentences: [Sentence] = []
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
@@ -61,16 +68,15 @@ struct ProjectDetailView: View {
 
             ScrollViewReader { proxy in
                 List {
-                    let sorted = project.sentences.sorted(by: { $0.order < $1.order })
-                    let nextUnlockId = sorted.first(where: { $0.status == .notStarted })?.id
+                    let nextUnlockId = sortedSentences.first(where: { $0.status == .notStarted })?.id
 
-                    ForEach(sorted) { sentence in
+                    ForEach(sortedSentences) { sentence in
                         let isUnlocked = sentence.status != .notStarted || sentence.id == nextUnlockId
                         let isPlayingThis = sentence.id == currentPlayingSentenceID
 
                         Group {
                             if isUnlocked {
-                                NavigationLink(destination: PracticeView(sentence: sentence, project: project)) {
+                                NavigationLink(value: sentence) {
                                     rowView(for: sentence)
                                 }
                             } else {
@@ -81,9 +87,19 @@ struct ProjectDetailView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(isPlayingThis ? Color.accentColor.opacity(0.12) : Color.clear)
                         .id(sentence.id)
+                        .onAppear {
+                            if !didLogFirstRowAppear {
+                                didLogFirstRowAppear = true
+                                let dt = Date().timeIntervalSince(appearT0)
+                                print("[ProjectDetailView] First row appeared after \(String(format: "%.3f", dt))s. rows=\(sortedSentences.count) timed=\(isTimedProject)")
+                            }
+                        }
                     }
                 }
                 .listStyle(.plain)
+                .navigationDestination(for: Sentence.self) { sentence in
+                    PracticeView(sentence: sentence, project: project, sortedSentences: sortedSentences, segmentPlayer: segmentPlayer)
+                }
                 .onChange(of: currentPlayingSentenceID) { _, newValue in
                     guard let id = newValue else { return }
                     withAnimation(.easeInOut) {
@@ -94,7 +110,7 @@ struct ProjectDetailView: View {
         }
         // No navigation title on this page per request
         .toolbar {
-            if project.completedCount == project.totalCount && project.totalCount > 0 {
+            if project.sourceAudioFileName == nil, project.completedCount == project.totalCount && project.totalCount > 0 {
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink(destination: SynthesisView(project: project)) {
                         Text("合成作品")
@@ -103,11 +119,36 @@ struct ProjectDetailView: View {
             }
         }
         .onAppear {
-            print("[ProjectDetailView] Appear for project: \(project.title), sentences: \(project.sentences.count)")
-            // Removed TTS voice logging per request
+            appearT0 = Date()
+            didLogFirstRowAppear = false
+            print("[ProjectDetailView] onAppear start. title=\(project.title) sentences=\(project.sentences.count)")
+            
+            // Setup lightweight things immediately
+            segmentPlayer.onSegmentEnd = { id in
+                DispatchQueue.main.async { currentPlayingSentenceID = nil }
+            }
+
+            // Perform heavy operations asynchronously
+            Task {
+                let t0 = Date()
+                let sorted = project.sentences.sorted(by: { $0.order < $1.order })
+                let timed = project.sourceAudioURL != nil && sorted.contains(where: { $0.hasTiming })
+                let dt = Date().timeIntervalSince(t0)
+                print("[ProjectDetailView] Background preparation took \(String(format: "%.3f", dt))s")
+                
+                await MainActor.run {
+                    sortedSentences = sorted
+                    isTimedProject = timed
+                    if let url = project.sourceAudioURL, timed {
+                        segmentPlayer.ensureLoaded(url: url)
+                    }
+                    print("[ProjectDetailView] Updated UI with sorted sentences.")
+                }
+            }
         }
         .onDisappear {
             stopSequentialPlayback()
+            segmentPlayer.stop()
         }
     }
 
@@ -139,9 +180,8 @@ struct ProjectDetailView: View {
 extension ProjectDetailView {
     private func startSequentialPlayback() {
         // Build ordered playback list until first missing recording
-        let sorted = project.sentences.sorted { $0.order < $1.order }
         var contiguous: [Sentence] = []
-        for s in sorted {
+        for s in sortedSentences {
             if let url = s.audioURL, FileManager.default.fileExists(atPath: url.path) {
                 contiguous.append(s)
             } else {
@@ -194,9 +234,24 @@ extension ProjectDetailView {
         currentPlayingSentenceID = nil
     }
 
-    
-
     // Seeking removed per request (no dragging)
+
+    // Timed playback
+    private func playTimedSentence(_ sentence: Sentence) {
+        guard let start = sentence.startTimeSec, let end = sentence.endTimeSec, end > start else { return }
+        if let url = project.sourceAudioURL {
+            let exists = FileManager.default.fileExists(atPath: url.path)
+            var sizeStr = "unknown"
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path), let size = attrs[.size] as? NSNumber {
+                let mb = Double(truncating: size) / (1024*1024)
+                sizeStr = String(format: "%.2f MB", mb)
+            }
+            print("[ProjectDetailView] playTimedSentence ensureLoaded url=\(url.lastPathComponent) exists=\(exists) size=\(sizeStr)")
+            segmentPlayer.ensureLoaded(url: url)
+        }
+        currentPlayingSentenceID = sentence.id
+        segmentPlayer.playSegment(id: sentence.id.uuidString, start: start, end: end)
+    }
 }
 
 #Preview {

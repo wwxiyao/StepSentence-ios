@@ -4,13 +4,13 @@ import SwiftData
 struct ProjectsView: View {
     @Environment(\.modelContext) private var context
     @State private var projects: [Project] = []
-    @State private var isCreatingNewProject = false
+    @State private var isCreatingProject = false
 
     var body: some View {
         NavigationStack {
             List {
                 ForEach(projects) { project in
-                    NavigationLink(destination: ProjectDetailView(project: project)) {
+                    NavigationLink(value: project) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(project.title).font(.headline)
                             Text("\(project.completedCount)/\(project.totalCount) 句已完成")
@@ -21,6 +21,9 @@ struct ProjectsView: View {
                 }
                 .onDelete(perform: delete)
             }
+            .navigationDestination(for: Project.self) { project in
+                ProjectDetailView(project: project)
+            }
             .navigationTitle("库")
             // 与下面的列表拉开一点点距离
             .safeAreaInset(edge: .top) {
@@ -28,17 +31,16 @@ struct ProjectsView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { 
-                        print("[ProjectsView] Plus button tapped")
-                        isCreatingNewProject = true 
-                    }) {
+                    Button {
+                        isCreatingProject = true
+                    } label: {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel("新建项目")
                 }
             }
-            .sheet(isPresented: $isCreatingNewProject) {
-                CreateProjectView()
+            .sheet(isPresented: $isCreatingProject, onDismiss: loadProjects) { 
+                NewProjectView()
             }
         }
         .onAppear {
@@ -49,6 +51,10 @@ struct ProjectsView: View {
                 print("[ProjectsView] Project \(index): \(project.title) - \(project.sentences.count) sentences")
             }
             print("=== End ProjectsView onAppear ===")
+        }
+        .onDisappear {
+            Diagnostics.shared.lastProjectsDisappearAt = Date()
+            print("[ProjectsView] onDisappear at \(Date().timeIntervalSince1970)")
         }
     }
 
