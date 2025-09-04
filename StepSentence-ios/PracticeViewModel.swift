@@ -14,7 +14,10 @@ final class PracticeViewModel {
     var errorMessage: String?
     var userRecordingURL: URL? {
         didSet {
-            sentence.audioFileName = userRecordingURL?.lastPathComponent
+            let newName = userRecordingURL?.lastPathComponent
+            if sentence.audioFileName != newName {
+                sentence.audioFileName = newName
+            }
         }
     }
 
@@ -44,6 +47,13 @@ final class PracticeViewModel {
         }
     }
 
+    // MARK: - Debug
+    private func debugLog(_ message: String) {
+        let ts = String(format: "%.3f", Date().timeIntervalSince1970)
+        let isMain = Thread.isMainThread ? "main" : "bg"
+        print("[PracticeVM][\(ts)][\(isMain)] \(message)")
+    }
+
     // MARK: - Public Interface
 
     func onViewAppear() {
@@ -51,6 +61,7 @@ final class PracticeViewModel {
     }
 
     func onViewDisappear() {
+        debugLog("onViewDisappear: stopping audio/TTS")
         Task { await localTTS.stop() }
         audioPlayback.stop()
         segmentPlayer.stop()
@@ -123,18 +134,44 @@ final class PracticeViewModel {
     }
 
     func approveSentence() {
+        debugLog("approveSentence: start for id=\(sentence.id)")
         sentence.status = .approved
         saveContext()
+        debugLog("approveSentence: end for id=\(sentence.id)")
     }
 
     func saveContext() {
+        debugLog("saveContext: begin")
         // Explicitly save the context
         try? project.modelContext?.save()
+        debugLog("saveContext: end")
     }
 
     func getNextSentence() -> Sentence? {
         // Jump to the first not-started sentence in project order
-        return sortedSentences.first(where: { $0.status == .notStarted })
+        let next = sortedSentences.first(where: { $0.status == .notStarted })
+        debugLog("getNextSentence -> \(next?.id.uuidString.prefix(6) ?? "nil")")
+        return next
+    }
+
+    func switchTo(newSentence: Sentence) {
+        debugLog("switchTo: begin -> id=\(newSentence.id)")
+        // Ensure any ongoing audio is stopped before switching
+        audioPlayback.stop()
+        segmentPlayer.stop()
+        Task { await localTTS.stop() }
+
+        self.sentence = newSentence
+        
+        // Reset state for the new sentence
+        self.isPlayingTTS = false
+        self.isPlayingRecording = false
+        self.isRecording = false
+        self.userRecordingURL = nil
+        loadUserRecording(for: newSentence)
+        
+        debugLog("switchTo: end -> id=\(newSentence.id)")
+        print("[PracticeViewModel] Switched to new sentence: \(newSentence.text)")
     }
 
     func reset(for newSentence: Sentence) {
@@ -156,12 +193,20 @@ final class PracticeViewModel {
     // MARK: - Private Logic
     
     private func loadUserRecording(for sentence: Sentence) {
+        debugLog("loadUserRecording: start for id=\(sentence.id) file=\(sentence.audioFileName ?? "nil")")
+        var newURL: URL? = nil
         if let fileName = sentence.audioFileName {
             let url = FileManager.documentsDirectory.appendingPathComponent(fileName)
-            if FileManager.default.fileExists(atPath: url.path) {
-                self.userRecordingURL = url
-            }
+            let exists = FileManager.default.fileExists(atPath: url.path)
+            debugLog("loadUserRecording: exists=\(exists) url=\(url.lastPathComponent)")
+            newURL = exists ? url : nil
         }
+        if self.userRecordingURL == newURL {
+            debugLog("loadUserRecording: no change (skip set)")
+            return
+        }
+        self.userRecordingURL = newURL
+        debugLog("loadUserRecording: end userRecordingURL=\(self.userRecordingURL?.lastPathComponent ?? "nil")")
     }
 
     private func startRecording() {

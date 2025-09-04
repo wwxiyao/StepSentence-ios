@@ -3,18 +3,26 @@ import SwiftData
 import UIKit
 
 struct PracticeView: View {
-    let sentence: Sentence
     let project: Project
     let sortedSentences: [Sentence]
     let segmentPlayer: SegmentPlayer
     
-    @State private var viewModel: PracticeViewModel?
+    @State private var viewModel: PracticeViewModel
     @State private var errorMessage: String?
     @State private var isInitializing = true
     @State private var ttsSelectedVoiceId: String = LocalTTS.shared.preferredVoiceId ?? LocalTTS.evanId
     @State private var isEditingTimestamp = false // New state to control editing mode
     
     @Environment(\.dismiss) private var dismiss
+
+    init(initialSentence: Sentence, project: Project, sortedSentences: [Sentence], segmentPlayer: SegmentPlayer) {
+        self.project = project
+        self.sortedSentences = sortedSentences
+        self.segmentPlayer = segmentPlayer
+        
+        let vm = PracticeViewModel(sentence: initialSentence, project: project, sortedSentences: sortedSentences, segmentPlayer: segmentPlayer)
+        _viewModel = State(initialValue: vm)
+    }
     
     // Color Palette
     private let backgroundColor = Color(.systemGray6)
@@ -29,50 +37,20 @@ struct PracticeView: View {
             backgroundColor.edgesIgnoringSafeArea(.all)
             
             VStack {
-                if isInitializing {
-                    initializationView
-                } else if let error = errorMessage {
-                    errorView(error)
-                } else if let vm = viewModel {
-                    practiceInterface(for: vm)
-                }
+                practiceInterface(for: viewModel)
             }
         }
         .navigationTitle("单句朗读")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: initializeViewModel)
+        .onAppear(perform: { viewModel.onViewAppear() })
         .onDisappear {
-            viewModel?.onViewDisappear()
+            viewModel.onViewDisappear()
         }
-    }
-    
-    @ViewBuilder
-    private var initializationView: some View {
-        VStack {
-            ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: primaryColor))
-                .scaleEffect(1.5)
-            Text("初始化中...")
-                .font(.title2)
-                .foregroundColor(.secondary)
-                .padding()
+        .onChange(of: viewModel.sentence.id) { oldValue, newValue in
+            print("[PracticeView] sentence.id changed: \(oldValue) -> \(newValue)")
         }
-    }
-    
-    @ViewBuilder
-    private func errorView(_ error: String) -> some View {
-        VStack(spacing: 15) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 50))
-                .foregroundColor(destructiveColor)
-            Text("发生错误")
-                .font(.title.bold())
-                .foregroundColor(.primary)
-            Text(error)
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+        .onChange(of: viewModel.userRecordingURL) { _, newValue in
+            print("[PracticeView] userRecordingURL changed: \(newValue?.lastPathComponent ?? "nil")")
         }
     }
     
@@ -127,9 +105,9 @@ struct PracticeView: View {
                         VoicePickerInline(selectedVoiceId: selectedVoiceId)
                             .padding([.top, .leading], 12)
                     } else {
-                        TimestampView(sentence: sentence, isEditing: $isEditingTimestamp) {
+                        TimestampView(sentence: vm.sentence, isEditing: $isEditingTimestamp) {
                             // This is the onCommit callback
-                            viewModel?.saveContext()
+                            viewModel.saveContext()
                         }
                         .padding([.top, .leading], 12)
                     }
@@ -148,10 +126,14 @@ struct PracticeView: View {
                 // Approval Button (conditionally)
                 if vm.userRecordingURL != nil && !vm.isRecording {
                     Button(action: {
+                        print("[PracticeView] Approve tapped for id=\(vm.sentence.id)")
                         vm.approveSentence()
-                        if let nextSentence = vm.getNextSentence() {
-                            vm.reset(for: nextSentence)
+                        let next = vm.getNextSentence()
+                        print("[PracticeView] Next sentence id=\(next?.id.uuidString ?? "nil")")
+                        if let nextSentence = next {
+                            vm.switchTo(newSentence: nextSentence)
                         } else {
+                            print("[PracticeView] No next sentence. Dismissing view.")
                             dismiss()
                         }
                     }) {
@@ -334,10 +316,8 @@ struct PracticeView: View {
     }
     
     private func initializeViewModel() {
-        let vm = PracticeViewModel(sentence: sentence, project: project, sortedSentences: sortedSentences, segmentPlayer: segmentPlayer)
-        vm.onViewAppear()
-        self.viewModel = vm
-        self.isInitializing = false
+        // This function is obsolete but kept to avoid breaking the call site immediately.
+        // The actual initialization is now in the View's init.
     }
 }
 
@@ -431,6 +411,6 @@ private extension PracticeView {
     project.sentences = [sentence]
     
     return NavigationStack {
-        PracticeView(sentence: sentence, project: project, sortedSentences: project.sentences, segmentPlayer: SegmentPlayer())
+        PracticeView(initialSentence: sentence, project: project, sortedSentences: project.sentences, segmentPlayer: SegmentPlayer())
     }
 }

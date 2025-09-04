@@ -98,7 +98,7 @@ struct ProjectDetailView: View {
                 }
                 .listStyle(.plain)
                 .navigationDestination(for: Sentence.self) { sentence in
-                    PracticeView(sentence: sentence, project: project, sortedSentences: sortedSentences, segmentPlayer: segmentPlayer)
+                    PracticeView(initialSentence: sentence, project: project, sortedSentences: sortedSentences, segmentPlayer: segmentPlayer)
                 }
                 .onChange(of: currentPlayingSentenceID) { _, newValue in
                     guard let id = newValue else { return }
